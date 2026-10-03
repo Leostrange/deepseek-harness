@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { ModuleLoader } from '@deepseek-ai/cordis-plugin-loader'
 import type { LocalizedText, PluginLocalizedMeta } from '@deepseek-ai/dsh-package-manifest'
 import { barePackageName } from './profile-resolution/resolver.ts'
+import russianDescriptions from './plugin-descriptions-ru.json' with { type: 'json' }
 
 const LANGUAGE_ID = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/u
 
@@ -154,6 +155,18 @@ function localizedText(
   return { en: fallback ?? finalFallback, ...Object.fromEntries(entries) }
 }
 
+/** Use a Russian package description only while its English source still matches. */
+function withRussianDescription(
+  name: unknown, english: string | undefined, description: LocalizedText | undefined,
+): LocalizedText | undefined {
+  if (typeof name !== 'string' || english === undefined || description === undefined) return description
+  const entry = (russianDescriptions as Record<string, { en: string; ru: string }>)[name]
+  if (entry === undefined || entry.en !== english) return description
+  if (typeof description === 'string') return { en: description, ru: entry.ru }
+  if (description.en !== english || description.ru !== undefined) return description
+  return { ...description, ru: entry.ru }
+}
+
 /**
  * Read plugin locale JSON display text and icon without evaluating JavaScript entries.
  * Only a package-root specifier reads its exported package.json: `name`/`description` fill missing
@@ -180,7 +193,10 @@ export function readPluginMeta(specifier: string, parentURL: string): PluginLoca
     const manifestPath = packageName === specifier ? optionalResourcePath(`${specifier}/package.json`, parentURL) : undefined
     const manifest = manifestPath === undefined ? undefined : readObject(manifestPath)
     const title = localizedText('title', dictionaries, fallbackText(manifest?.name), specifier)
-    const description = localizedText('description', dictionaries, fallbackText(manifest?.description), '')
+    const englishDescription = fallbackText(manifest?.description)
+    const description = withRussianDescription(
+      manifest?.name, englishDescription, localizedText('description', dictionaries, englishDescription, ''),
+    )
     const text = {
       ...title === undefined ? {} : { title },
       ...description === undefined ? {} : { description },
